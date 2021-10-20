@@ -2,9 +2,12 @@
  Precursor functions
 
 */
-
+   use std::ops::*;
+   
 use crate::numeric::Sign;
 use crate::traits::*;
+
+
 
    // In-place Multiply-add carry
 fn mul_carry(carry: u64, x: u64, y: &u64, output: &mut u64)->u64{
@@ -31,7 +34,7 @@ let product = (x as u128 * y as u128) + carry as u128 + *output as u128;
    // In-place shift-right, returns the extra bits that were shifted out
 fn carry_shr(carry: u64, x: u64, places: u32, output: &mut u64)->u64{
     *output = (x>>places)|carry ;
-    unsafe  { core::arch::x86_64::_bextr_u64(x,0,places)<<(64-places) }
+    unsafe  { core::arch::x86_64::_bextr_u64(x,0,places).overflowing_shl(64-places).0 }
 }
 
    // In-place shift-left, returns the extra bits that were shifted out
@@ -171,10 +174,15 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
  
  */
  
- #[derive(Debug,Clone)]
+ #[derive(Debug,Clone, PartialEq)]
  pub struct Mpz{
          sign: Sign,
      elements: Vec<u64>,
+ }
+ 
+ impl Set for Mpz{}
+ impl Magma for Mpz{
+       fn op(&self, other: Self)->Self{other}
  }
  
  
@@ -207,6 +215,10 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
             }
          self.elements[self.len()-1usize-index_length as usize].leading_zeros() as u64 + 64u64*index_length
         }
+        
+ pub   fn bit_length(&self)->u64{
+    64u64*self.len() as u64-self.leading_zeros()
+ }       
  
  pub   fn trailing_zeros(&self)-> u64{// Trailing zeros
           let mut index_length : u64 =0;
@@ -225,6 +237,23 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
         self.elements.truncate(k as usize);
     }
  
+ pub  fn set_bit(&mut self, index: usize){ //flips the bit at the index
+  
+  self.elements[index/64usize]|=1<<(index%64)
+ 
+ }
+ 
+ pub  fn set_digit(&mut self, index: usize, value: u64){
+       self.elements[index]=value;
+ }
+ 
+ pub  fn truncate(&mut self, len: usize){
+     let selflen = self.len();
+     let mut t = vec![];
+     t.extend_from_slice( &mut self.elements[(selflen-len)..selflen]);
+     self.elements=t;
+      
+ }
  /*
  Equality Operations 
  
@@ -268,6 +297,56 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
       }
     }
   return true
+ }
+ 
+ /*
+   Shifting operations
+ 
+ */
+ 
+ pub fn shift_left(&mut self, shift: usize){
+    
+    let mut k = self.clone();
+    let mut trail_zeroes = vec![0;shift/64usize];
+ 
+    let carry = slice_shl(&mut self.elements[..],(shift%64usize) as u32);
+ 
+ trail_zeroes.extend_from_slice(&self.elements[..]);
+ 
+ if carry > 0{
+    trail_zeroes.push(carry)
+ }
+ 
+ self.elements = trail_zeroes;
+ 
+ }
+ 
+ 
+ pub fn shift_right(&mut self, shift: usize){
+ 
+ let mut carry = 0u64;
+ 
+ let mut vector : Vec<u64> = self.elements.drain((shift/64usize)..self.elements.len()).collect();
+ let sub_shift = shift%64usize;
+ 
+ for i in vector.iter_mut().rev(){
+      carry = carry_shr(carry, *i,sub_shift as u32,i);
+    
+ }
+ 
+ self.elements = vector;
+ }
+ 
+ pub fn shl(&self, shift: usize)->Mpz{
+     let mut k = self.clone();
+     k.shift_left(shift);
+     k
+ }
+ 
+ pub fn shr(&self, shift: usize)->Mpz{
+      let mut k = self.clone();
+     k.shift_right(shift);
+     k
  }
  
  /*
@@ -336,6 +415,15 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
  
  }
  
+ impl std::ops::Add for Mpz{
+       type Output = Self;
+      fn add(self, other: Self)->Self{
+         let mut k =self.clone();
+         k+=other;
+         k
+      }
+ }
+ 
  impl MulIdentity for Mpz{
       
       fn mul_identity()->Self{
@@ -343,6 +431,40 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
       }
  }
  
+ impl Mul for Mpz{
+    type Output = Self;
+     fn mul(self,other: Self)->Self{
+         let mut y= Mpz::new(self.sign,vec![]);
+         let mut offset = 0usize;
+        
+          for i in other.elements.iter(){
+              let mut k = self.scalar(i);
+                  y.shift_add(&k,offset);
+                  offset+=1;
+         }
+          y
+     }
+ }
+ 
+ impl MulInverse for Mpz{
+ 
+  //broken fix this
+    fn mul_inverse(&self)->Self{
+       let mut d = self.clone();
+       let mut start = Mpz::new(Sign::Positive,vec![0u64;d.len()]);
+       start.elements[d.len()-1]=1;
+       let mut two = Mpz::new(Sign::Positive, vec![0u64;d.len()*2+1]);
+       two.elements[d.len()*2]=2;
+       for i in 0..20{
+          let dx = d.multiply(&start);
+          let delta = two.clone() + dx.add_inverse();
+          start = d.multiply(&delta);
+          start.truncate(d.len());
+       }
+       start
+  }
+ 
+ }
  
  
  impl Mpz {
@@ -398,17 +520,6 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
     }
    }
  
-  pub fn multiply(&mut self,other: &Mpz)->Mpz{
-         let mut y= Mpz::new(self.sign.mul(&other.sign),vec![]);
-         let mut offset = 0usize;
-        
-          for i in other.elements.iter(){
-              let mut k = self.scalar(i);
-                  y.shift_add(&k,offset);
-                  offset+=1;
-         }
-          y
-     }
    
      // Exponentiation
   pub  fn pow(&self, mut y:u64)->Mpz{
@@ -431,5 +542,9 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
         }
       return x_mpz.multiply(&z)
      }
+           
+    }
  
-  }
+ impl SemiRing for Mpz {}
+ impl Ring for Mpz {}
+  
