@@ -1,24 +1,21 @@
-
 pub mod traits;
     mod numeric;
     mod rational;
     mod hypercomplex;
     mod mpz;
+    mod quotient;
+    
+    mod matrix;
+    mod blas1;
+    mod blas3;
+    
     use mpz::*;
     use numeric::*;      
     use traits::*;  
     use rational::*;
     use hypercomplex::*;
-                
-
-
-
-fn main() {
-     let mut a = HyperComplex::<f64,4>::unchecked_new([0f64,2f64,2f64,3f64]);
-     let p = a.multiply(a.clone());
-     println!("{:?}",p )
-     
-   
+    use quotient::*;
     
-   
-}
+    use blas1::*;    
+    use blas3::*;
+    use matrix::*;      
