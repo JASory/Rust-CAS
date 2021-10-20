@@ -3,6 +3,9 @@
 
 */
 
+
+
+
   use crate::traits::*;
 
 #[derive(Clone, Copy,Debug, PartialEq)]
@@ -36,31 +39,222 @@ pub enum Sign{
         }
       }  
  }
+ 
+ /*
+ 
+ Precursor functions for Number Theorectic function
+ 
+ */
+ 
+ const SMALL_PRIMES : [u64;33] = [
+        3,5,7,11,13,17,19,23,29,31,37,41,
+        43,47,53,59,61,67,71,73,79,83,89,
+        97,101, 103,107,109, 113, 127, 131,
+        139, 149];
+ 
+ fn rand()-> u64{
+    let mut x: u64 = 0; 
+    let k = unsafe { core::arch::x86_64::_rdrand64_step(&mut x) } ;
+   x
+ }
+ 
+    // difference
+ fn delta_u64(x: u64, y: u64)->u64{
+      if x > y {
+          x-y
+       }
+      else {
+          y -x
+      }
+    }
+    
+   fn mod_sqr(x: u64, n: u64)->u64{
+    ((x as u128 * x as u128 + 1 )%n as u128) as u64
+   }
+   
+   // modular exponentiation
+fn modpow(x : u64,mut  pow: u64, modulus: u64)-> u64{  //upgrades to u128 to allow
 
+  let mut z = 1u128;
+  let mut base = x.clone() as u128;
+  let n = modulus as u128;
+  if pow ==0 {
+    return z as u64
+  }
+
+ while pow > 1 {
+  
+   if pow%2 == 0 {
+      base = base*base % n ;
+      pow>>=1;
+   }
+  
+  else{
+  
+   z = base*z % n;
+   base = base*base % n;
+   pow=(pow-1)>>1;  
+   
+ }
+ }
+
+  (base*z % n) as u64
+
+}
+
+fn fermat_test(p: u64, base: u64)->bool{// fermat test
+     if modpow(base,p-1, p)==1{  // if 2^p-1 mod p = 1 return true as it is a pseudoprime to base
+      return  true                      
+     }  
+       false            // else return false
+    }
+    
+   
+ fn strong_fermat(p: u64, base: u64)->bool{// checks if base^p = 1 mod p  or base^(d*2^n)= -1 for some n  
+     let zeroes = (p-1).trailing_zeros() as u64; // Breaks number down to p= d*2^n -1
+     let d = (p-1)/ (1<<zeroes);
+     let mut x = modpow(base,d, p); // base^d mod p
+     if x == 1u64 || x==p-1{   // checks if base^p = 1 mod p  or base^(d*2^n)= -1
+       return true
+       }
+    for _ in 0..zeroes-1{// checks for all d*2^zeroes. One is subtracted since d*2^n was already checked above
+     x = modpow(x, 2, p);
+     if x == p-1 {       // if any d*2^zeroes = p-1  then it passes
+       return true
+     }
+    }
+    return false        // otherwise it fails
+ }
+ 
+ fn miller_rabin(p: u64)->bool{// probabilistic miller rabin (1/4)^5 , skips 2 and 3
+    for _ in 0..5{
+     if strong_fermat(p,2 + rand()%(p-4)) == false{    // there is no rand function here, write your own or copy from the RNG.rs file is this repository
+      return false
+     }
+    }
+    return true
+ }
+   
+   fn rho(n: u64)->u64{
+
+  let mut x = 2; let mut y = 2; let mut d = 1;
+  
+  while d == 1 {
+  x = mod_sqr(x,n);
+  y = mod_sqr(mod_sqr(y,n),n)%n;
+  d = delta_u64(x,y).gcd(n)
+   }
+   d
+}
+
+
+      
+ 
+ 
+ 
+ 
+ /*
+    trait implementations for u64 up to semiring 
+
+ */
+ 
+ impl Set for u64{}
+ impl Magma for u64{
+    fn op(&self, other: Self)->Self{other}
+ }
+ 
+ impl AddIdentity for u64 {
+     fn add_identity()->Self{0u64}
+ }
+
+ impl MulIdentity for u64{
+     fn mul_identity()->Self{1u64}
+ }
+ 
+ impl SemiRing for u64 {}
+
+ 
+ impl GCD for u64{
+ 
+      fn gcd(&self, mut other: Self)->Self{
+        use std::cmp::min;
+        use std::mem::swap;
+      
+      let mut v = self.clone();
+    
+    if other == 0 {
+          return v;
+      } else if v == 0 {
+          return other;
+      }
+
+      let i = other.trailing_zeros();  other >>= i;
+      let j = v.trailing_zeros();  v >>= j;
+      let k = min(i, j);
+ 
+      loop {
+         
+         if other > v {
+             swap(&mut other, &mut v);
+         }
+         v -= other;
+
+         if v == 0 {
+             return other << k;
+         }
+         v >>= v.trailing_zeros();
+  }
+ }
+ }
 
  impl UFD for u64{
      
      fn irreducible(self)->bool{
      
-         if self&1 == 0 && self !=2 || self==1 || ( self%3==0 && self !=3){  // checks for 1,2,and 3 cases
-            return  false
-         }
-       let limit = ((self as f64).sqrt() as u64 +1u64)/6 +1;  // set upper bound as sqrt(p)/6 +1
-         for i in 1..limit{
-           if self%(6*i-1) == 0 || self%(6*i+1) == 0{// check if divisible by the 5-rough numbers up to the limit
-             return false
-           }                        // Higher p-rough sets have greater efficiency but diminishing returns 
-         }
-      return true
+          if self&1 == 0 && self !=2 || self==1 || ( self%3==0 && self !=3){ return false} // checks for 1,2,and 3 cases
+          if self < 5 && (self == 2 || self == 3 ){return true}
+          miller_rabin(self)  
      }
+     
+    fn factor(self)->Vec<u64>{
+         let mut n = self.clone();
+   let twofactors = n.trailing_zeros();
+   n >>=twofactors;
+   let mut factors = vec![2;twofactors as usize];
+   
+   
+     if n.irreducible(){
+        factors.push(n);
+         return factors
+     }
+   
+   
+    for i in SMALL_PRIMES{ // strips small factors
+       while n%i == 0{
+         n/=i;
+         factors.push(i)
+       }
+    }
+
+    if n == 1 {return factors }
+    while rho(n) != n {   //larger factors using the pollard-rho algorithm
+       factors.push(rho(n));
+       n/=rho(n);
+    }
+    factors.push(n);
+   // factors.sort();
+    factors
+    } 
+    
  }
-
-
-
- impl EuclideanDomain for u64{
  
-      fn remainder(self, other: Self)->Self{
-         self%other
+
+
+
+ impl Euclidean for u64{
+ 
+      fn euclidean(self, other: Self)->(Self,Self){
+        (self/other, self%other)
       }
       
      fn form(&self, x: Self, c: Self)->bool{
@@ -68,54 +262,9 @@ pub enum Sign{
         interim*x + c == *self
      } 
       
-     fn gcd(mut self, mut other: Self)->Self{
-        use std::cmp::min;
-        use std::mem::swap;
-
-  
-      if self == 0 {
-          return other;
-      } else if self == 0 {
-          return other;
-      }
-
-      let i = self.trailing_zeros();  self >>= i;
-      let j = self.trailing_zeros();  other >>= j;
-      let k = min(i, j);
- 
-      loop {
-         
-         if self > other {
-             swap(&mut self, &mut other);
-         }
-         other -= self;
-
-         if other == 0 {
-             return self << k;
-         }
-         other >>= other.trailing_zeros();
-    }
-  }
 }
 
-// trait implementations for u64 up to semiring 
- impl AddIdentity for u64 {
-     fn add_identity()->Self{0u64}
- }
- 
- impl AddOperation for u64 {
-     fn addition(mut self, other: Self)->Self{self + other}
- }
- 
- impl MulIdentity for u64{
-     fn mul_identity()->Self{1u64}
- }
- 
- impl MulOperation for u64{
-     fn multiply(mut self, other: Self)->Self{self*other}
- }
- 
- impl SemiRing for u64 {}
+
  
  
  
@@ -127,12 +276,13 @@ pub enum Sign{
     Traits up to Ring for i64
  */
  
- impl AddIdentity for i64 {
-     fn add_identity()->Self{0i64}
+ impl Set for i64{}
+ impl Magma for i64{
+    fn op(&self, other: Self)->Self{other}
  }
  
- impl AddOperation for i64 {
-     fn addition(mut self, other: Self)->Self{self + other}
+ impl AddIdentity for i64 {
+     fn add_identity()->Self{0i64}
  }
  
  impl AddInverse for i64 {
@@ -143,28 +293,17 @@ pub enum Sign{
      fn mul_identity()->Self{1i64}
  }
  
- impl MulOperation for i64{
-     fn multiply(mut self, other: Self)->Self{self*other}
- }
+ 
  
  impl SemiRing for i64 {}
  
  impl Ring for i64 {}
  
  
- impl EuclideanDomain for i64{
+ impl GCD for i64{
       
-      fn remainder(self, other: Self)->Self{
-         (self as u64 %other as u64) as i64
-      }
-      
-      fn form(&self, x: Self, c: Self)->bool{
-        let interim = (self-c)/x;
-        interim*x + c == *self
-     } 
-      
-      fn gcd(self, other: Self)->Self{
-         (self as u64).gcd(other as u64) as i64
+      fn gcd(&self, other: Self)->Self{
+         (self.clone() as u64).gcd(other as u64) as i64
       }
  }
  
@@ -173,20 +312,38 @@ pub enum Sign{
       fn irreducible(self)->bool{
            (self as u64).irreducible()
       }
+      fn factor(self)->Vec<i64>{
+         (self as u64).factor().iter().map(|x| *x as i64).collect::<Vec<i64>>()
+      }
+ }
+ 
+ impl Euclidean for i64{
+      
+      fn euclidean(self, other: Self)->(Self,Self){
+         (self/other, self%other)
+      }
+      
+      fn form(&self, x: Self, c: Self)->bool{
+        let interim = (self-c)/x;
+        interim*x + c == *self
+     } 
  }
  
 /*
 f64 traits up to Field
 
 */ 
+
+impl Set for f64{}
+ impl Magma for f64{
+    fn op(&self, other: Self)->Self{other}
+ }
  
  impl AddIdentity for f64 {
      fn add_identity()->Self{0f64}
  }
  
- impl AddOperation for f64 {
-     fn addition(mut self, other: Self)->Self{self + other}
- }
+ 
  
  impl AddInverse for f64 {
      fn add_inverse(&self)->Self {-self}
@@ -196,9 +353,6 @@ f64 traits up to Field
      fn mul_identity()->Self{1f64}
  }
  
- impl MulOperation for f64{
-     fn multiply(mut self, other: Self)->Self{self*other}
- }
  
  impl MulInverse for f64{
      fn mul_inverse(&self)->Self{self.recip()}
@@ -209,6 +363,31 @@ f64 traits up to Field
  impl MultiplicativeGroup for f64 {}
  
  impl SemiRing for f64 {}
+ 
+ impl GCD for f64{// GCD floor to integer
+    
+    fn gcd(&self, other: Self)->Self{
+        (self.clone() as u64).gcd(other as u64) as f64
+    }
+ }
+ 
+ impl UFD for f64{
+     
+     fn irreducible(self)->bool{false}
+     fn factor(self)->Vec<f64>{vec![1f64]}
+ }
+ 
+ impl Euclidean for f64{
+    
+    fn euclidean(self, other: Self)->(Self, Self){
+       ((self/other).floor(), self - other*(self/other).floor())
+    }
+    
+    fn form(&self, x: Self, c: Self)->bool{
+        let interim = (self-c)/x;
+        interim*x + c == *self
+     } 
+ }
  
  impl Ring for f64 {}
  
