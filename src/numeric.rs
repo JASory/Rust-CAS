@@ -4,8 +4,6 @@
 */
 
 
-
-
   use crate::traits::*;
 
 #[derive(Clone, Copy,Debug, PartialEq)]
@@ -134,6 +132,21 @@ fn fermat_test(p: u64, base: u64)->bool{// fermat test
     }
     return true
  }
+
+
+   
+   fn det_miller_rabin(p: u64)->bool{
+       const BASE : [u64;12] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+       for i in BASE{
+         if p == i{
+           return true
+         }
+         if strong_fermat(p,i)==false{
+          return false
+         }
+       }
+       return true
+   }
    
    fn rho(n: u64)->u64{
 
@@ -158,7 +171,18 @@ fn fermat_test(p: u64, base: u64)->bool{// fermat test
 
  */
  
- impl Set for u64{}
+ impl Set for u64{
+      fn rand()->Self{
+          let mut x: u64 = 0; 
+          let k = unsafe { core::arch::x86_64::_rdrand64_step(&mut x) } ;
+          x
+      }
+      
+      fn format(&self)->String{
+           self.to_string()
+      }
+ }
+ 
  impl Magma for u64{
     fn op(&self, other: Self)->Self{other}
  }
@@ -213,40 +237,66 @@ fn fermat_test(p: u64, base: u64)->bool{// fermat test
      
           if self&1 == 0 && self !=2 || self==1 || ( self%3==0 && self !=3){ return false} // checks for 1,2,and 3 cases
           if self < 5 && (self == 2 || self == 3 ){return true}
-          miller_rabin(self)  
+          for i in SMALL_PRIMES[1..].iter(){
+            if self == *i{
+              return true
+            }
+            if self%i == 0{
+             return false
+            }
+          } 
+          det_miller_rabin(self)  
      }
      
-    fn factor(self)->Vec<u64>{
-         let mut n = self.clone();
-   let twofactors = n.trailing_zeros();
-   n >>=twofactors;
-   let mut factors = vec![2;twofactors as usize];
-   
-   
-     if n.irreducible(){
+ 
+  fn factor(self)->Vec<u64>{
+      
+       let mut n = self.clone();
+       let twofactors = n.trailing_zeros();
+       n>>=twofactors; 
+       
+       let mut factors : Vec<u64> = vec![];
+       
+       if twofactors > 0{
+          factors.push(2);
+          factors.push(twofactors as u64);
+       }
+       
+       if n.irreducible(){
         factors.push(n);
+        factors.push(1);
          return factors
      }
-   
-   
-    for i in SMALL_PRIMES{ // strips small factors
-       while n%i == 0{
-         n/=i;
-         factors.push(i)
+       
+       for i in SMALL_PRIMES{ // strips out small primes
+          if n%i==0{
+            factors.push(i);
+            let mut count = 0u64;
+          while n%i==0 {
+            count +=1;
+            n/=i;
+          }
+          factors.push(count);
+          }
        }
-    }
-
-    if n == 1 {return factors }
-    while rho(n) != n {   //larger factors using the pollard-rho algorithm
-       factors.push(rho(n));
-       n/=rho(n);
-    }
-    factors.push(n);
-   // factors.sort();
-    factors
-    } 
-    
+       
+       if n == 1 {return factors}
+       
+    while n != 1{
+          let k = rho(n);
+           factors.push(k);
+           let mut count = 0u64;
+      while n%k == 0{
+             count+=1;
+             n/=k;
+           }
+           factors.push(count);
+       }
+       factors
+  }
+ 
  }
+ 
  
 
 
@@ -276,7 +326,11 @@ fn fermat_test(p: u64, base: u64)->bool{// fermat test
     Traits up to Ring for i64
  */
  
- impl Set for i64{}
+ impl Set for i64{
+     fn rand()->i64{unsafe{std::mem::transmute::<u64,i64>(u64::rand())}}
+     fn format(&self)->String{self.to_string()}
+ }
+ 
  impl Magma for i64{
     fn op(&self, other: Self)->Self{other}
  }
@@ -297,7 +351,9 @@ fn fermat_test(p: u64, base: u64)->bool{// fermat test
  
  impl SemiRing for i64 {}
  
- impl Ring for i64 {}
+ impl Ring for i64 {
+   fn characteristic()->u64{ 0u64}
+ }
  
  
  impl GCD for i64{
@@ -334,7 +390,39 @@ f64 traits up to Field
 
 */ 
 
-impl Set for f64{}
+ impl Set for f64{
+    fn rand()->f64{unsafe{std::mem::transmute::<u64,f64>(u64::rand())} }
+    fn format(&self)->String{
+    
+    if self == &f64::INFINITY {
+      return "∞".to_string()
+  }
+  if self.is_nan(){
+      return "NaN".to_string()
+  }
+  else {
+      let mut num = String::new();
+      let mut exponent = String::new();
+      let mut Sign = String::new();
+      let exp  = self.log10().floor();
+      if exp >= 0.0{
+          exponent = "E+".to_string()+ &exp.to_string();
+      }
+      
+      else {
+          exponent="E".to_string() + &exp.to_string();
+      }
+      
+      
+      
+      num = (self/10f64.powf(exp)).to_string();
+      num.truncate(17);  // limits to 16 places
+               return num + &exponent;
+       }
+ }
+ 
+ } // end impl 
+
  impl Magma for f64{
     fn op(&self, other: Self)->Self{other}
  }
@@ -389,7 +477,7 @@ impl Set for f64{}
      } 
  }
  
- impl Ring for f64 {}
+ impl Ring for f64 {fn characteristic()->u64{ 0u64}}
  
  impl Field for f64 {}
 
