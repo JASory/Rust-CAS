@@ -33,15 +33,15 @@ pub fn euclid_gcd(p: i64 , q: i64)->(i64,i64,i64){
    use crate::traits::*;
    
    #[derive(Debug, Copy, Clone)]
- pub struct Quotient<const N: u64>{
+ pub struct ZahlRing<const N: u64>{
                p: u64,
      }
      
 
-impl<const N: u64> Quotient<N> {
+impl<const N: u64> ZahlRing<N> {
 
    pub fn unchecked_new(p: u64)->Self{
-          Quotient{p}
+          Self{p}
         }
     
   pub  fn new(p: u64)->Self{
@@ -50,51 +50,58 @@ impl<const N: u64> Quotient<N> {
        
  }
  
-  impl<const N: u64> Set for Quotient<N> {}
+  impl<const N: u64> Set for ZahlRing<N> {
+        fn rand()->Self{
+          Self::new(u64::rand())
+        }
+        fn format(&self)->String{
+            self.p.format()
+        }
+  }
  
- impl<const N: u64> Magma for Quotient<N> {
+ impl<const N: u64> Magma for ZahlRing<N> {
         fn op(&self, other: Self)->Self {other}
  }
   
-  impl<const N: u64> AddIdentity for Quotient<N>{
+  impl<const N: u64> AddIdentity for ZahlRing<N>{
         
         fn add_identity()->Self{
             Self::unchecked_new(0u64)
         }
   }
   
-  impl<const N: u64> AddInverse for Quotient<N>{
+  impl<const N: u64> AddInverse for ZahlRing<N>{
         
         fn add_inverse(&self)->Self{
             Self::unchecked_new(N-self.p)
         }
   }
   
-  impl<const N: u64> Add for Quotient<N>{
+  impl<const N: u64> Add for ZahlRing<N>{
         type Output= Self;
      fn add(self, other: Self)->Self{
          Self::unchecked_new( (self.p%N + other.p%N)%N )
      }
 }
 
-  impl<const N: u64> MulIdentity for Quotient<N>{
+  impl<const N: u64> MulIdentity for ZahlRing<N>{
      fn mul_identity()->Self{
      Self::unchecked_new(1u64)
      }
   }
 
-  impl<const N: u64> Mul for Quotient<N>{
+  impl<const N: u64> Mul for ZahlRing<N>{
         type Output= Self;
      fn mul(self, other: Self)->Self{
          Self::unchecked_new( (self.p%N * other.p%N)%N )
      }
 }
 
-  impl<const N: u64> AdditiveGroup for Quotient<N>{}
-  impl<const N: u64> SemiRing for Quotient<N>{}
-  impl<const N: u64> Ring for Quotient<N>{}
+  impl<const N: u64> AdditiveGroup for ZahlRing<N>{}
+  impl<const N: u64> SemiRing for ZahlRing<N>{}
+  impl<const N: u64> Ring for ZahlRing<N>{fn characteristic()->u64 {N}}
 
-impl<const N: u64> Quotient<N> {
+impl<const N: u64> ZahlRing<N> {
     
     fn sqr(&self)->Self{
         Self::unchecked_new( ((self.p as u128 * self.p as u128)% N as u128) as u64)
@@ -134,7 +141,7 @@ impl<const N: u64> Quotient<N> {
     
     
     
-    fn mul_inverse(&self)->Option<Self>{
+ pub fn mul_inverse(&self)->Option<Self>{
        let modulo = N as i64;  
       let gcd = euclid_gcd(self.p as i64, modulo);
       if gcd.0 == 1 {
@@ -144,5 +151,23 @@ impl<const N: u64> Quotient<N> {
          None
       }
     }
+    // order of the multiplicative group Z/nZ  order being an n such that a^n == 1
+  pub fn mul_order(&self)->u64{
+          if N.gcd(self.p) != 1 {
+              return 0u64
+          }
+          
+        //  let factors = N.factor();   
+        //  let phi_factors = N.totient().factor();
+          
+          for i in 1..N{
+        //  println!("{}",self.pow(i).p);
+             if self.pow(i).p == 1{
+            // println!("{}",self.pow(i).p);
+                 return i
+             }
+          }
+          return 0u64
+  }  
     
 }
