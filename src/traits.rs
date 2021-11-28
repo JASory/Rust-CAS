@@ -1,4 +1,7 @@
-pub trait Set {}
+pub trait Set {
+   fn rand()->Self;
+   fn format(&self)->String;
+}
 
 pub trait Magma : Set {
     fn op(&self,other: Self)->Self;
@@ -35,7 +38,11 @@ pub trait MultiplicativeGroup : std::ops::Mul<Output = Self> + MulIdentity + Mul
 
 pub trait SemiRing : std::ops::Add<Output = Self> + std::ops::Mul<Output = Self> + AddIdentity + MulIdentity + Sized {}
 
-pub trait Ring : SemiRing + AddInverse {}
+pub trait Ring : SemiRing + AddInverse { 
+
+      fn characteristic()->u64 ;
+      
+      }
 
 pub trait Integral : Ring {}
 
@@ -76,4 +83,33 @@ pub trait Lattice: PartiallyOrdered {
     
     fn infinum(&self)->Self;
     fn suprenum(&self)->Self;
+}
+
+
+
+pub trait NumberTheory {
+
+  fn prime_omega(&self)->u64;
+  fn prime_omega_small(&self)->u64;
+  fn smooth(&self)->Self;
+  fn is_smooth(&self, b: u64)->bool;
+  fn k_free(&self,k: u64)->bool;
+  fn is_square(&self)->bool;
+  fn louiville(&self)->i64;
+  fn mobius(&self)->i64;
+  fn primorial(&self)->Self;
+  fn radical(&self)->Self;
+  fn factorial(&self)->Self;
+  fn k_factorial(&self, k: u64)->Self;
+  fn coprime(&self, x: Self)->bool;
+  fn totient(&self)->Self;
+  fn jordan_totient(&self, k: u32)->Self;
+  fn dedekind_psi(&self)->Self;
+  fn pi(&self)->u64;
+  fn primes(&self)->Vec<u64>;
+  fn nth_prime(&self)->Self;
+  fn li(&self)->u64;
+  fn mangoldt(&self)->f64;
+  fn chebyshev(&self)->f64;
+  
 }
