@@ -2,15 +2,27 @@
  Precursor functions
 
 */
+
    use std::ops::*;
    
 use crate::numeric::Sign;
 use crate::traits::*;
+use crate::numbertheorectic::*;
 
 
+
+
+
+ // Multiply accumulate 
+ #[inline]
+pub fn mac(carry: u64, x: u64, y: u64, output: &mut u64 )->u64{
+    let interim = carry as u128 + x as u128 * y as u128 + *output as u128;
+    *output = interim as u64;
+    (interim>>64u64 ) as u64
+}
 
    // In-place Multiply-add carry
-fn mul_carry(carry: u64, x: u64, y: &u64, output: &mut u64)->u64{
+fn carry_mul(carry: u64, x: u64, y: &u64, output: &mut u64)->u64{
 
     let product = (x as u128 * *y as u128) + carry as u128 ;
 
@@ -18,30 +30,30 @@ fn mul_carry(carry: u64, x: u64, y: &u64, output: &mut u64)->u64{
           (product>>64) as u64
    }
    
-   
-   fn mul_carry2(carry: u64, x: u64, y: u64, output: &mut u64)->u64{
-
-let product = (x as u128 * y as u128) + carry as u128 + *output as u128;
-
-*output=product as u64;
-
-  (product>>64) as u64
+ fn carry_div(carry: u64, x: u64, y: u64, output: &mut u64)->u64{
+    let num = unsafe { std::mem::transmute::<(u64,u64), u128>((x,carry)) };
+    let factor = num/y as u128;
+     *output = factor as u64; 
+    (num %y as u128) as u64
 }
-  
-
 
 
    // In-place shift-right, returns the extra bits that were shifted out
-fn carry_shr(carry: u64, x: u64, places: u32, output: &mut u64)->u64{
+pub fn carry_shr(carry: u64, x: u64, places: u32, output: &mut u64)->u64{
     *output = (x>>places)|carry ;
-    unsafe  { core::arch::x86_64::_bextr_u64(x,0,places).overflowing_shl(64-places).0 }
+    if places == 0{
+        return 0
+    }
+    unsafe  { core::arch::x86_64::_bextr_u64(x,0,places)<<(64-places)/*.overflowing_shl(65-places).0<<(64-places)*/ }
 }
 
    // In-place shift-left, returns the extra bits that were shifted out
-fn carry_shl(carry: u64, x: u64, places: u32, output: &mut u64)->u64{
+pub fn carry_shl(carry: u64, x: u64, places: u32, output: &mut u64)->u64{
    *output = (x.overflowing_shl(places).0)|carry ;
        unsafe  { core::arch::x86_64::_bextr_u64(x,64-places,64) }
 }
+
+
 
 /*
    Bitwise slice operations 
@@ -123,7 +135,7 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
  fn offset_add(x: &mut[u64],y: &mut[u64], offset: usize)->u8{  //adds the second value to the first, shifted by offset
 
     let (lo,hi) = x.split_at_mut(offset);
- 
+ //uint/shift.rs
      unequal_add(hi,y)
  }
  /*
@@ -160,10 +172,54 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
    let mut carry = 0u64;
    
    for i in x.iter_mut() {
-     carry = mul_carry(carry,*i,&scale, i);
+     carry = carry_mul(carry,*i,&scale, i);
    }   
    carry
   }
+
+fn  scalar_slice2(x: &[u64], scale : u64, output: &mut [u64]){
+      
+   let mut carry = 0u64;
+   
+   for (i,j) in x.iter().zip(output.iter_mut()) {
+     carry = carry_mul(carry,*i,&scale, j);
+   }
+   if carry > 0 {
+       output[x.len()]=carry;
+   }
+  }
+  
+ pub fn mul_slice2(x: &[u64], y: &[u64], output : &mut [u64]){
+      let mut scalevec = vec![0u64;x.len()+1];
+      for i in 0..y.len(){
+          scalar_slice2(&x[..],y[i],&mut scalevec[..]);
+          unequal_add(&mut output[i..], &scalevec[..]);
+      }
+  }
+
+
+pub fn mul_slice(x: &[u64], y: &[u64], output: &mut[u64])->u64{
+    let mut carry = 0u64;
+    for i in 0..y.len(){
+      for j in 0..x.len()  {
+          carry = mac(carry,x[j],y[i],  &mut output[j +i]);
+      }
+      output[i + y.len()]  = carry;
+      carry = 0;
+    }
+    carry
+}
+  
+   // divides inplace and returns remainder
+ fn div_slice(x : &mut[u64], divisor: u64 )->u64{
+ 
+ let mut carry = 0u64;
+   
+   for i in x.iter_mut().rev() {
+     carry = carry_div(carry,*i,divisor, i);
+   }   
+   carry
+ }
 
 
 
@@ -180,7 +236,15 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
      elements: Vec<u64>,
  }
  
- impl Set for Mpz{}
+ impl Set for Mpz{
+     fn rand()->Mpz{
+        Self::new(Sign::Positive, (0..100).map(|_| u64::rand()).collect::<Vec<u64>>())
+     }
+     
+     fn format(&self)->String{
+         self.elements.iter().rev().map(|x| x.format()).collect::<Vec<String>>().join(",")
+     }
+ }
  impl Magma for Mpz{
        fn op(&self, other: Self)->Self{other}
  }
@@ -205,38 +269,59 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
      
   pub   fn leading_zeros(&self)-> u64{// leading zeros
      
-           let mut index_length : u64 =0;
+           let mut idx : u64 =0;
     
-            for i in 0..self.len(){
-                if self.elements[self.len()-1usize-i]!=0u64{
-                   index_length=i as u64;
-                      break;
+            for i in self.elements.iter().rev(){
+                if i == &0u64{
+                   idx+=1;
+                }
+                else{
+                  break;
                 }
             }
-         self.elements[self.len()-1usize-index_length as usize].leading_zeros() as u64 + 64u64*index_length
+            if idx == self.len() as u64{
+               return 64u64*idx
+            }
+            else{
+              return self.elements[self.len()-1usize-idx as usize].leading_zeros() as u64 + 64u64*idx
+            }
         }
+        
+        
+ pub   fn trailing_zeros(&self)-> u64{// Trailing zeros
+          let mut idx : u64 =0;
+    
+            for i in self.elements.iter(){
+                if i == &0u64{
+                   idx+=1;
+                }
+                else{
+                  break;
+                }
+            }
+        if idx == self.len() as u64{
+               return 64u64*idx
+            }
+            else{
+              return self.elements[idx as usize].leading_zeros() as u64 + 64u64*idx
+            }
+       }       
+       
         
  pub   fn bit_length(&self)->u64{
     64u64*self.len() as u64-self.leading_zeros()
  }       
- 
- pub   fn trailing_zeros(&self)-> u64{// Trailing zeros
-          let mut index_length : u64 =0;
-    
-         for i in 0..self.len(){
-             if self.elements[i] !=0u64{
-                 index_length=i as u64;
-                    break;
-             }
-         }
-         self.elements[index_length as usize].trailing_zeros() as u64+ 64u64*index_length
-       }
     
  pub  fn remove_lead_zeros(&mut self){// Remove leading zeros
         let k = self.leading_zeros()/64u64 ; 
-        self.elements.truncate(k as usize);
-    }
- 
+         self.elements.truncate(self.len() -k as usize)
+       }
+    
+  /*  
+ pub  fn remove_trail_zeros(&mut self){
+       let len = self.data.iter()
+ } 
+ */
  pub  fn set_bit(&mut self, index: usize){ //flips the bit at the index
   
   self.elements[index/64usize]|=1<<(index%64)
@@ -253,6 +338,10 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
      t.extend_from_slice( &mut self.elements[(selflen-len)..selflen]);
      self.elements=t;
       
+ }
+ 
+ pub  fn lead_digit(&self)->u64{
+          self.elements[..].last().unwrap().clone()
  }
  /*
  Equality Operations 
@@ -404,13 +493,14 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
         }
        else {
              carry = unequal_sub(&mut self.elements[..],&other.elements[..]);
+             self.elements[other.len()]-=1;
         }
     }
     
      if carry == 1u8{
           self.elements.push(1u64)
      }
-   
+   self.remove_lead_zeros();
  }
  
  }
@@ -488,6 +578,60 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
       k
   }
   
+  pub fn self_div(&mut self, x: u64)->u64{
+          div_slice(&mut self.elements[..],x)
+  }
+  
+  pub fn word_div(&self,x: u64)->(Self, u64){
+       let mut quotient = self.clone();
+       let remainder = quotient.self_div(x);
+       (quotient,remainder)
+  }
+  
+  /*
+  2 	3 	5 	7 	11 	13 	17 	19 	23 	29 	31 	37 	41 	43 	47 	53 	59 	61 	67 	71
+ 	73 	79 	83 	89 	97 	101
+  */
+    
+  pub fn factor(&self)->Vec<u64>{
+          //const PRIMES : [u64;24] = [3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,61,67,71,73,79,83,89,97,101];
+          let primes = 100000u64.primes();  
+          let mut n = self.clone();
+          let mut factors = Vec::new();
+          let two_factor = self.trailing_zeros();
+          if two_factor > 0{
+             factors.push(2u64);
+             factors.push(two_factor);
+             n.shift_right(two_factor as usize);
+          }
+  'outer :  for i in primes{
+          let (quo,mut rem) = n.word_div(i);
+        
+         
+          if rem == 0{
+           let mut count = 1u64;
+             factors.push(i);
+             n = quo;
+            
+    'inner : loop {
+             
+             let (inner_quo, inner_rem) = n.word_div(i);
+             
+             if inner_rem != 0{
+                break 'inner;
+             }
+             n = inner_quo;
+             count+=1;
+            
+            }
+            
+            factors.push(count); 
+          }
+          
+          }
+          factors
+  }
+  
   //K-factorial
   
  pub  fn factorial(x: u64, y:u64)-> Mpz{
@@ -520,6 +664,20 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
     }
    }
  
+  pub fn multiply(&mut self,other: &Mpz)->Mpz{
+
+          let newlen = self.len()+other.len()+1;
+          let mut y  = Mpz::new(self.sign.mul(&other.sign),vec![0u64;newlen]);
+         
+          mul_slice2(&self.elements[..],&other.elements[..],&mut y.elements[..]);
+        
+          if y.elements[newlen-2]==0u64{
+          y.elements.pop(); 
+          y.elements.pop();
+          } 
+          y
+     }
+     
    
      // Exponentiation
   pub  fn pow(&self, mut y:u64)->Mpz{
@@ -542,9 +700,79 @@ fn slice_shl(x: &mut[u64], shift: u32)-> u64{
         }
       return x_mpz.multiply(&z)
      }
-           
+     
+     
+ pub fn euclidean(mut self, other: Self)->(Self, Self){
+     
+      use std::{thread, time};
+   let ten_millis = time::Duration::from_millis(100);
+   
+   // let mut factor = Mpz::add_identity();   // use a zero vector and setbit 
+   let mut factor = Mpz::new(Sign::Positive,vec![0;self.len()-other.len()+1]);
+    let mut correction = 0usize;
+    while self.bit_length() > other.bit_length(){
+  //  thread::sleep(ten_millis);
+      let delta = (self.bit_length()-other.bit_length()-1) as usize;
+     let mut k = other.shl(delta);
+
+      if k.greater_than(&self){
+   
+      k=other.shl(delta-1);
+ 
+         correction=1;
+     }
+   
+      factor +=Mpz::mul_identity().shl(delta-correction);  
+      self+=k.add_inverse();
+      }
+      
+      if self.is_equal(&other){
+      self = Mpz::add_identity();
+      factor+=Mpz::mul_identity();
+      }
+      self.remove_lead_zeros();
+      (self, factor)
+    
     }
+  
+      //rarely works fix this
+    pub fn gcd(&self, mut other: Self)->Self{
+        
+        use std::cmp::min;
+        use std::mem::swap;
+      
+      let mut v = self.clone();
+      let zero = Mpz::add_identity();
+    
+    if other.is_equal(&zero) {
+          return v;
+      } else if v.is_equal(&zero) {
+          return other;
+      }
+      let i = other.trailing_zeros() as usize;  other.shift_right(i);
+      let j = v.trailing_zeros() as usize;  v.shift_right(j);
+      let k = min(i, j);
+
+      loop {
+         
+         if other.greater_than(&v) {
+             swap(&mut other, &mut v); 
+         }
+         v += other.add_inverse();
+         v.remove_lead_zeros();
+         other.remove_lead_zeros();
+
+         if v.is_equal(&zero) || v.elements.is_empty() {
+             return other.shl(k);
+         }
+         v.shift_right(v.trailing_zeros() as usize)
+  }
+        
+    }
+  
+ 
+ }
  
  impl SemiRing for Mpz {}
- impl Ring for Mpz {}
+ impl Ring for Mpz {fn characteristic()->u64 {0u64}}
   
