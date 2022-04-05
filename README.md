@@ -1,9 +1,9 @@
 # Rust-CAS
 Rust Computer Algebra library
-- Multiprecision Arithmetic
-- HyperComplex including Complex, Dual,Eisenstein, Quaternion, Octonion
-- Field of Fractions
-- Number Theoretic Functions 
+- Multiprecision Arithmetic and Number-theoretic functions via ENT
+- HyperComplex numbers including Complex, Dual,Quaternions, Octonions and Guassian integers
+- Field of Fractions, 
+- Set construction
+- Linear algebra 
 
 
-Very out of date, general concept remains. Update with equivalent restructure by 06-2022
