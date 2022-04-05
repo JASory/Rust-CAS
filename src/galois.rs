@@ -1,8 +1,3 @@
-
- use crate::traits::*;
- use std::ops::*;
- 
-
 #[derive(Clone,Copy,Debug, PartialEq)]
 pub struct Galois<const P : u64, const S : usize>{
        coef: [u64;S],
@@ -58,9 +53,9 @@ impl <const P: u64, const S: usize> AddIdentity for Galois<P,S>{
    }
 }
 
-impl<const P: u64, const S: usize >Add for Galois<P,S>{
+impl<const P: u64, const S: usize >AddOp for Galois<P,S>{
              type Output = Self;
-    fn add(self, other: Self)->Self{
+    fn add(&self, other: &Self) -> Self{
        let mut k = self.clone();
        for (i,j) in k.coef[..].iter_mut().zip(other.coef[..].iter()){
             *i= (*i + j)%P;
@@ -91,5 +86,4 @@ impl<const P: u64, const S: usize >Add for Galois<P,S>{
   }
   
  //   impl<const P : u64, const S: usize>Mul for Galois<P,S>{
-  
   
