@@ -30,14 +30,3 @@ use crate::polynomial::univariate::Univariate;
 
 
 use number_theory::*;
-fn main() {
-
-
-       let mut z = SqMatrix::<u64,9>::unchecked_new([1,2,3,4,5,6,7,8,9]);
-       // let k = Dual::new(17f64,1f64);
-       println!("{}",z.format());
-     z.col_swap(1,0);
-     
-       
-        println!("{}",z.format())
-}
