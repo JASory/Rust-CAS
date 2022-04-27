@@ -73,7 +73,6 @@ use crate::Matrix;
   }   
                           
   pub fn is_symmetric(&self)->bool{
-     
      symmetric(M,M,&self.elements)
      }
      
@@ -92,9 +91,9 @@ use crate::Matrix;
  
  pub fn trace(&self) -> T{
     let m = self.row_num();
-    let mut k = T::default()::add_identity();
+    let mut k = T::default().add_identity();
      for i in 0..m{
-         k = k.addition(&mat[(i*n+i) as usize])
+         k = k.addition(&self.elements[(i*m+i) as usize])
        }
        k
  }
