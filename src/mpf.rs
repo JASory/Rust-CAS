@@ -135,6 +135,13 @@
      let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
      Self::new(self.num.ref_product(&dec).sqrt(),self.point+precision)
  }
+    
+    
+ pub fn nth_root(&self, rt: u64, precision: usize) -> Self{
+     let scale = (precision as usize*rt as usize) as u64+(rt-1);
+     let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
+     Self::new(self.num.ref_product(&dec).nth_root(rt),self.point+precision)
+ }   
  /*
  pub fn pow(&self, p: u64) -> Self{
     let 
