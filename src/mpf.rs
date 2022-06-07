@@ -147,13 +147,7 @@
           let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
           Self::new(self.num.ref_product(&dec).euclidean_div(&other.num).0,self.point+scale as usize-other.point)
  }
- /*
- pub fn sqrt(&self, precision: usize) -> Self{
-     let scale = (precision*2  + self.point) as u64;
-     let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
-     Self::new(self.num.ref_product(&dec).sqrt(),self.point+precision)
- }
- */
+ 
  
  pub fn sqrt(&self, precision: usize) -> Self{
      let scale = ((precision*2usize  + self.point)) as u64;
