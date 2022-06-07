@@ -5,14 +5,10 @@
  use number_theory::Mpz;
  use number_theory::NumberTheory;
 
- /*
- pub fn formatter(x: String, splice: usize) -> String{
-     
- } 
-*/
+
  #[derive(Debug,Default,Clone, PartialEq)]
  pub struct Mpf{
-    num: Mpz,
+    pub(crate) num: Mpz,
     point: usize,
  }
  
@@ -23,15 +19,37 @@
      Self{num,point}
  }
  
- pub fn from_string(x: &str) -> Self{
-       
-        let deci = x.chars().position(|x| x == '.').unwrap();
-        let mut s = x.to_owned();
-        
-        s.remove(deci);
-        //println!("{}",s);
-        Self::new(Mpz::from_string(&s).unwrap(),x.len()-1-deci)
-
+ 
+ pub fn from_string(x: &str) -> Option<Self>{
+     let mut k = x.as_bytes().to_vec();
+     
+     while k[k.len()-1]==48{
+       k.pop();
+     }
+    k.push(48);
+     //println!("{:?} {}",k,k.len());
+     let point = k.iter().position(|z| z == &46);
+     let mut deci = 0usize;
+     
+     match point {
+      Some(x) => deci = x,
+      None => {} 
+     }
+     k.remove(deci);
+     
+     let p = unsafe {String::from_utf8_unchecked(k)};
+      
+      match Mpz::from_string(&p){
+       Some(x) => return Some(Mpf::new(x,deci)),
+       None => return None,
+      }
+     
+     
+     
+ }
+ 
+ pub fn from_mpz(num: Mpz) -> Self {
+     Self{num, point: 0usize}
  }
       // Fix for negative values smaller than 1
  pub fn to_string(&self) -> String{
@@ -44,7 +62,7 @@
         p
  }
  
- 
+ //pub fn from_f64() -> Self{}
  }
  
  impl Set for Mpf{
@@ -103,7 +121,7 @@
  impl MulIdentity for Mpf{
  
     fn mul_identity(&self) -> Self{
-        Self::new(Mpz::one(),1usize)
+        Self::new(Mpz::one(),0usize)
     }
  }
  
@@ -129,20 +147,53 @@
           let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
           Self::new(self.num.ref_product(&dec).euclidean_div(&other.num).0,self.point+scale as usize-other.point)
  }
- 
+ /*
  pub fn sqrt(&self, precision: usize) -> Self{
      let scale = (precision*2  + self.point) as u64;
      let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
      Self::new(self.num.ref_product(&dec).sqrt(),self.point+precision)
  }
-    
-    
+ */
+ 
+ pub fn sqrt(&self, precision: usize) -> Self{
+     let scale = ((precision*2usize  + self.point)) as u64;
+     let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
+     Self::new(self.num.ref_product(&dec).sqrt(),self.point+precision)
+ }
+     
+ 
  pub fn nth_root(&self, rt: u64, precision: usize) -> Self{
-     let scale = (precision as usize*rt as usize) as u64+(rt-1);
+     let scale = (precision as usize*rt as usize) as u64+(self.point as u64 + rt+1);
      let dec = Mpz::from_u64(5).pow(scale).shl((scale as usize));
      Self::new(self.num.ref_product(&dec).nth_root(rt),self.point+precision)
- }   
+ }
+ 
+ pub fn pow(&self, p: u64) -> Self{
+     let mut z = Mpf::default().mul_identity();
+     let mut base = self.clone();
+     let mut pow = p ; 
+     if pow == 0 {
+       return z
+     }
+     while pow > 1 {
+       if pow&1 == 0{
+       base = base.product(&base);
+        pow>>=1;
+       }
+       else{
+         z = z.product(&base);
+         base = base.product(&base);
+        pow = (pow-1)>>1; 
+       }
+     }
+     return z.product(&base)
+ }
  /*
+ pub fn exp(&self, precision: usize) -> Self{
+ 
+ }
+ 
+ 
  pub fn pow(&self, p: u64) -> Self{
     let 
  }
